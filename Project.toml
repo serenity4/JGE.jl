@@ -1,0 +1,13 @@
+name = "JGE"
+uuid = "9f14b124-c50e-4008-a7d4-969b2a6cd68a"
+authors = ["Cédric Belmant"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
