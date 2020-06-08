@@ -1,6 +1,6 @@
 using JGE
+using SafeTestsets
 using Test
 
-@testset "JGE.jl" begin
-    # Write your own tests here.
-end
+@safetestset "Core" begin include("core/runtests.jl") end
+@safetestset "Utils" begin include("utils/runtests.jl") end
