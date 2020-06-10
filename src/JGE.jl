@@ -2,8 +2,11 @@ module JGE
 
 using GLFW
 
+include("core/glfw.jl")
+include("core/keymaps.jl")
+
 function main()
-    window = GLFW.CreateWindow(640, 480, "GLFW.jl")
+    create_window((1000, 720); key_callback = keyprinter)
 end
 
 export main
