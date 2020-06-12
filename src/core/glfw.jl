@@ -8,9 +8,9 @@ struct KeyEvent
 end
 
 
+shift = 1
 ctrl = 2
 alt = 4
-shift = 1
 
 function ismod(name::AbstractString, event::KeyEvent)
     if name == "alt"
@@ -37,6 +37,15 @@ function iskey(name::AbstractString, event::KeyEvent)
     else
         return getfield(GLFW, Symbol(uppercase("key_$name"))) == event.key
     end
+end
+
+function iskey(name::AbstractString, action::AbstractString, event::KeyEvent)
+    if action == "released"
+        action = "release"
+    elseif action == "pressed"
+        action = "press"
+    end
+    return iskey(name, event) && isaction(action, event)
 end
 
 function isaction(name::AbstractString, event::KeyEvent)
@@ -79,4 +88,4 @@ function create_window(window_size::Tuple{Integer,Integer}; key_callback = nothi
     end
     println("Good bye!")
     GLFW.DestroyWindow(window)
-end        
+end
