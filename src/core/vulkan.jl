@@ -54,7 +54,7 @@ function Base.show(io::IO, pdp::VkPhysicalDeviceProperties)
 	println(io, "    Vendor ID ", pdp.vendorID)
 	println(io, "    Device ID: ", pdp.deviceID)
 	println(io, "    Device Type: ", pdp.deviceType)
-	println(io, "    Device Name: ", String(filter(x->x != 0, UInt8[pdp.deviceName...])))
+	println(io, "    Device Name: ", String(pdp.deviceName))
 	println(io, "    Pipeline Cache UUID: ", String(collect(pdp.pipelineCacheUUID)))
 	println(io, "    Limits: ", pdp.limits)
 	println(io, "    Sparse Properties: \n    ", pdp.sparseProperties)
@@ -92,7 +92,7 @@ function check_layers(layer_names::AbstractArray{T} where T <: AbstractString, a
     @assert issubset(layer_names, avail_layer_names) "The following layers are not available: $(symdiff(intersect(avail_layer_names, layer_names), layer_names))"
 end
 
-@inline function get_required_extensions(glfw, debug)
+@inline function required_extensions(glfw, debug)
     avail_exts = available_extensions()
     ext_names = []
     if glfw
@@ -111,7 +111,7 @@ end
     end
 end
 
-@inline function get_required_layers(debug)
+@inline function required_layers(debug)
     layer_names = []
     if debug
         push!(layer_names, "VK_LAYER_KHRONOS_validation")
@@ -130,27 +130,49 @@ end
 
 function create_instance(; glfw=true, debug=true)
     app_info_ref = Ref(create_appinfo())
-    exts, exts_count = get_required_extensions(glfw, debug)
-    layers, layers_count = get_required_layers(debug)
+    exts, exts_count = required_extensions(glfw, debug)
+    layers, layers_count = required_layers(debug)
     info = Ref(VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, Base.unsafe_convert(Ptr{VkApplicationInfo}, app_info_ref), layers_count, layers, exts_count, exts))
     inst_ref = Ref{VkInstance}()
     @vkcheck vkCreateInstance(info, C_NULL, inst_ref)
     return inst_ref[]
 end
 
-function check_devices(inst)
+function available_physical_devices(inst)
     device_count = Ref{UInt32}(0)
     @vkcheck vkEnumeratePhysicalDevices(inst, device_count, C_NULL)
     devices = Array{VkPhysicalDevice}(undef, device_count[])
-    @assert device_count[] != 0
-    # @vkcheck vkEnumeratePhysicalDevices(inst_ref[], device_count, devices)
-    # device_props = Ref{VkPhysicalDeviceProperties}()
-    # vkGetPhysicalDeviceProperties(devices[], device_props)
+    @vkcheck vkEnumeratePhysicalDevices(inst, device_count, devices)
+    return devices
+end
+
+function properties(devices::AbstractArray{VkPhysicalDevice})
+    return map(properties, devices)
+end
+
+function properties(device::VkPhysicalDevice)
+    device_props = Ref{VkPhysicalDeviceProperties}()
+    vkGetPhysicalDeviceProperties(device, device_props)
+    return device_props[]
+end
+
+function select_physical_device(pdps)
+    for pdp in pdps
+        if pdp.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+            return pdp
+        end
+    end
 end
 
 function initialize(; glfw=true, debug=true)
-    inst_ref = create_instance(;glfw=glfw, debug=debug)
-    return inst_ref
+    inst = create_instance(;glfw=glfw, debug=debug)
+    devices = available_physical_devices(inst)
+    pdps = properties(devices)
+    @debug "Physical devices found:$(map(x->"\n          $(String(x.deviceName))", pdps)...)"
+    pdp = select_physical_device(pdps)
+    @debug "Selected device $(String(pdp.deviceName))"
+    device = pdps[findfirst(map(x->x == pdp, pdps))]
+    return inst, device
 end
 
 function cleanup(instance)
@@ -158,8 +180,7 @@ function cleanup(instance)
 end
 
 function test(; kwargs...)
-    inst = initialize(; kwargs...)
-    check_devices(inst)
+    inst, device = initialize(; kwargs...)
     cleanup(inst)
     return true
-end
+end    
