@@ -65,16 +65,14 @@ function create_appinfo(; name="Vulkan Instance", exts=C_NULL, version=VK_MAKE_V
     return app_info
 end
 
-function check_glfw_compat()
+function available_extensions()
     ext_names = GLFW.GetRequiredInstanceExtensions()
     avail_exts_count = Ref{UInt32}()
     @vkcheck vkEnumerateInstanceExtensionProperties(C_NULL, avail_exts_count, C_NULL)
     avail_exts = Array{VkExtensionProperties}(undef, avail_exts_count[])
     @vkcheck vkEnumerateInstanceExtensionProperties(C_NULL, avail_exts_count, avail_exts)
-    avail_exts_names = map(ext->String(filter(x->x != 0, UInt8[ext.extensionName...])), avail_exts)
-    @assert issubset(ext_names, avail_exts_names) "GLFW requires extensions that are not available: $(symdiff(intersect(avail_exts_names, ext_names), ext_names))"
+    return avail_exts
 end
-
 
 function available_layers()
     layer_count = Ref{UInt32}(0)
@@ -84,32 +82,57 @@ function available_layers()
     return avail_layers
 end
 
+function check_extensions(ext_names::AbstractArray{T} where T <: AbstractString, avail_exts)
+    avail_ext_names = map(x->convert(x.extensionName, String), avail_exts)
+    @assert issubset(ext_names, avail_ext_names) "The following extensions are not available: $(symdiff(intersect(avail_layer_names, layer_names), layer_names))"
+end
+
 function check_layers(layer_names::AbstractArray{T} where T <: AbstractString, avail_layers)
     avail_layer_names = map(x->convert(x.layerName, String), avail_layers)
     @assert issubset(layer_names, avail_layer_names) "The following layers are not available: $(symdiff(intersect(avail_layer_names, layer_names), layer_names))"
 end
 
-function create_instance(; glfw=true, debug=true)
-    app_info_ref = Ref(create_appinfo())
-    exts_count = Ref{UInt32}(0)
+@inline function get_required_extensions(glfw, debug)
+    avail_exts = available_extensions()
+    ext_names = []
     if glfw
-        check_glfw_compat()
-        exts = GLFW.GetRequiredInstanceExtensions(exts_count)
-    else
-        exts = C_NULL
+        ext_names = [ext_names..., GLFW.GetRequiredInstanceExtensions()...]
     end
     if debug
-        layer_names = ["VK_LAYER_KHRONOS_validation"]
-        check_layers(layer_names, available_layers())
-        @debug "Enabled layers:$(map(x->"\n          $x", layer_names)...)"
-        enabled_layer_names = Base.unsafe_convert(Ptr{Cstring}, pointer.(layer_names))
-        enabled_layers_count = length(enabled_layer_names)
-    else
-        enabled_layer_names = C_NULL
-        enabled_layers_count = 0
+        push!(ext_names, "VK_EXT_debug_utils")
     end
+    if ext_names != []
+        check_extensions(ext_names, available_extensions())
+        @debug "Enabled extensions:$(map(x->"\n          $x", ext_names)...)"
+        exts = Base.unsafe_convert(Ptr{Cstring}, pointer.(ext_names))
+        return exts, length(ext_names)
+    else
+        return C_NULL, 0
+    end
+end
 
-    info = Ref(VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, Base.unsafe_convert(Ptr{VkApplicationInfo}, app_info_ref), enabled_layers_count, enabled_layer_names, exts_count[], exts))
+@inline function get_required_layers(debug)
+    layer_names = []
+    if debug
+        push!(layer_names, "VK_LAYER_KHRONOS_validation")
+    end
+    if layer_names != []
+        check_layers(Vector{String}(layer_names), available_layers())
+        @debug "Enabled layers:$(map(x->"\n          $x", layer_names)...)"
+        layers = Base.unsafe_convert(Ptr{Cstring}, pointer.(layer_names))
+        layers_count = length(layers)
+    else
+        layers = C_NULL
+        layers_count = 0
+    end
+    return layers, layers_count
+end
+
+function create_instance(; glfw=true, debug=true)
+    app_info_ref = Ref(create_appinfo())
+    exts, exts_count = get_required_extensions(glfw, debug)
+    layers, layers_count = get_required_layers(debug)
+    info = Ref(VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, Base.unsafe_convert(Ptr{VkApplicationInfo}, app_info_ref), layers_count, layers, exts_count, exts))
     inst_ref = Ref{VkInstance}()
     @vkcheck vkCreateInstance(info, C_NULL, inst_ref)
     return inst_ref[]
