@@ -1,5 +1,12 @@
 using VulkanCore.LibVulkan # for autocompletion on VSCode, else VulkanCore alone is fine
 using GLFW
+import Base:findfirst
+
+function findfirst(value, A)
+    return findfirst(map(x->x == value, A))
+end
+
+include("defaults.jl")
 
 ENV["JULIA_DEBUG"] = "all"
 
@@ -132,7 +139,7 @@ function create_instance(; glfw=true, debug=true)
     app_info_ref = Ref(create_appinfo())
     exts, exts_count = required_extensions(glfw, debug)
     layers, layers_count = required_layers(debug)
-    info = Ref(VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, Base.unsafe_convert(Ptr{VkApplicationInfo}, app_info_ref), layers_count, layers, exts_count, exts))
+    info = Ref(VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, unsafe_pointer(app_info_ref), layers_count, layers, exts_count, exts))
     inst_ref = Ref{VkInstance}()
     @vkcheck vkCreateInstance(info, C_NULL, inst_ref)
     return inst_ref[]
@@ -156,31 +163,87 @@ function properties(device::VkPhysicalDevice)
     return device_props[]
 end
 
-function select_physical_device(pdps)
+function select_physical_device(f, pdps)
     for pdp in pdps
-        if pdp.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+        if Bool(f(pdp))
             return pdp
         end
     end
 end
 
+function available_queue_families(device)
+    qf_count = Ref{UInt32}(0)
+    vkGetPhysicalDeviceQueueFamilyProperties(device, qf_count, C_NULL)
+    # vkGetPhysicalDeviceQueueFamilyProperties(C_NULL, qf_count, C_NULL)
+    qf_props = Array{VkQueueFamilyProperties}(undef, qf_count[])
+    vkGetPhysicalDeviceQueueFamilyProperties(device, qf_count, qf_props)
+    return qf_props
+end
+
+function select_queue_family(f, queue_families)
+    for qf in queue_families
+        if Bool(f(qf))
+            return qf
+        end
+    end
+end
+
+# this function has to be generated so that there is no change in scope, which may invalide pointers
+@generated function unsafe_pointer(obj)
+    quote
+        @assert typeof(obj) <: Ref
+        Base.unsafe_convert(Ptr{typeof(obj[])}, obj)
+    end
+end
+
+@inline function create_logical_device(physical_device, queue_family_index;features=nothing, queue_count=1, queue_priorities=[1.0])
+    device = Ref{VkDevice}()
+    @assert typeof(physical_device) == VkPhysicalDevice
+    if isnothing(features)
+        features = Ref(VkPhysicalDeviceFeatures(values(DEFAULT_VK_PHYSICAL_DEVICE_FEATURES)...))
+    end
+    device_queue_info = Ref(VkDeviceQueueCreateInfo(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, C_NULL, 0, queue_family_index, queue_count, Base.unsafe_convert(Ptr{Float32}, Array{Float32,1}(queue_priorities))))
+    device_info = Ref(VkDeviceCreateInfo(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, C_NULL, 0, 1, unsafe_pointer(device_queue_info), 0, C_NULL, 0, C_NULL, unsafe_pointer(features)))
+    println(device_queue_info)
+    println(features)
+    println(device_info)
+    println(physical_device)
+    # return 0
+    @vkcheck vkCreateDevice(physical_device, device_info, C_NULL, device)
+    return device
+end
+
+
+
 function initialize(; glfw=true, debug=true)
     inst = create_instance(;glfw=glfw, debug=debug)
-    devices = available_physical_devices(inst)
-    pdps = properties(devices)
+    pdevices = available_physical_devices(inst)
+    pdps = properties(pdevices)
     @debug "Physical devices found:$(map(x->"\n          $(String(x.deviceName))", pdps)...)"
-    pdp = select_physical_device(pdps)
-    @debug "Selected device $(String(pdp.deviceName))"
-    device = pdps[findfirst(map(x->x == pdp, pdps))]
+    pdp = select_physical_device(pdp->pdp.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, pdps)
+    @debug "Selected device \"$(String(pdp.deviceName))\""
+    pdevice = pdevices[findfirst(pdp, pdps)]
+    avail_qf = available_queue_families(pdevice)
+    qf = select_queue_family(qf->qf.queueFlags & VK_QUEUE_GRAPHICS_BIT, avail_qf)
+    device = create_logical_device(pdevice, findfirst(qf, avail_qf))
     return inst, device
 end
 
-function cleanup(instance)
+function cleanup(instance, device)
     vkDestroyInstance(instance, C_NULL)
+    
+    # causes segfault at the moment
+    # vkDestroyDevice(device, C_NULL)
 end
 
 function test(; kwargs...)
     inst, device = initialize(; kwargs...)
-    cleanup(inst)
+    cleanup(inst, device)
     return true
-end    
+end
+
+function test_manytimes(; kwargs...)
+    for i in 1:20
+        test(; kwargs...)
+    end
+end
