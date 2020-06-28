@@ -196,21 +196,18 @@ end
     end
 end
 
-@inline function create_logical_device(physical_device, queue_family_index;features=nothing, queue_count=1, queue_priorities=[1.0])
+function create_logical_device(physical_device, queue_family_index;features=nothing, queue_count=1, queue_priorities=[1.0])
     device = Ref{VkDevice}()
     @assert typeof(physical_device) == VkPhysicalDevice
     if isnothing(features)
         features = Ref(VkPhysicalDeviceFeatures(values(DEFAULT_VK_PHYSICAL_DEVICE_FEATURES)...))
     end
     device_queue_info = Ref(VkDeviceQueueCreateInfo(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, C_NULL, 0, queue_family_index, queue_count, Base.unsafe_convert(Ptr{Float32}, Array{Float32,1}(queue_priorities))))
-    device_info = Ref(VkDeviceCreateInfo(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, C_NULL, 0, 1, unsafe_pointer(device_queue_info), 0, C_NULL, 0, C_NULL, unsafe_pointer(features)))
-    println(device_queue_info)
-    println(features)
-    println(device_info)
-    println(physical_device)
-    # return 0
-    @vkcheck vkCreateDevice(physical_device, device_info, C_NULL, device)
-    return device
+    @GC.preserve device_queue_info features begin
+        device_info = Ref(VkDeviceCreateInfo(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, C_NULL, 0, 1, unsafe_pointer(device_queue_info), 0, C_NULL, 0, C_NULL, unsafe_pointer(features)))
+        @vkcheck vkCreateDevice(physical_device, device_info, C_NULL, device)
+    end
+    return device, device_info, device_queue_info, features
 end
 
 
@@ -225,7 +222,8 @@ function initialize(; glfw=true, debug=true)
     pdevice = pdevices[findfirst(pdp, pdps)]
     avail_qf = available_queue_families(pdevice)
     qf = select_queue_family(qf->qf.queueFlags & VK_QUEUE_GRAPHICS_BIT, avail_qf)
-    device = create_logical_device(pdevice, findfirst(qf, avail_qf))
+    device, device_info, device_queue_info, features = create_logical_device(pdevice, findfirst(qf, avail_qf))
+    # vkDestroyDevice(device, C_NULL)
     return inst, device
 end
 
