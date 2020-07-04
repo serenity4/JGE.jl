@@ -1,44 +1,10 @@
-using VulkanCore.LibVulkan # for autocompletion on VSCode, else VulkanCore alone is fine
-using GLFW
-import Base:findfirst
-
-function findfirst(value, A)
-    return findfirst(map(x->x == value, A))
-end
-
-include("defaults.jl")
-
-ENV["JULIA_DEBUG"] = "all"
 
 struct NotFoundError <: Exception
     msg
 end
-struct VulkanError <: Exception
-    msg::AbstractString
-    errorcode
-end
+
 
 Base.showerror(io::Core.IO, e::NotFoundError) = print(io, "NotFoundError: $(e.msg)")
-Base.showerror(io::Core.IO, e::VulkanError) = print(io, "$(e.errorcode): ", e.msg)
-
-
-"""
-    @vkcheck vkFunctionSomething()
-
-Checks whether the expression returned VK_SUCCESS. Else, throw an error printing the corresponding code."""
-macro vkcheck(expr)
-    quote
-        local expr_return_code = $(esc(expr))
-        if typeof(expr_return_code) != VkResult
-            throw(ErrorException("the return value is not a valid code"))
-        end
-        if expr_return_code != VK_SUCCESS
-            local str_error = $(string(expr))
-            throw(VulkanError("failed to execute $str_error", expr_return_code))
-        end
-    end
-end
-
 
 function convert(field::NTuple{256,UInt8}, ::Type{String})
     return String(filter(x->x != 0, UInt8[field...]))
@@ -67,7 +33,7 @@ function Base.show(io::IO, pdp::VkPhysicalDeviceProperties)
 	println(io, "    Sparse Properties: \n    ", pdp.sparseProperties)
 end
 
-function create_appinfo(; name="Vulkan Instance", exts=C_NULL, version=VK_MAKE_VERSION(0, 0, 1), engine_name="NoEnngine", engine_version=VK_MAKE_VERSION(0, 0, 1), api_version=VK_API_VERSION_1_0())
+function create_appinfo(; name = "Vulkan Instance", exts = C_NULL, version = VK_MAKE_VERSION(0, 0, 1), engine_name = "NoEnngine", engine_version = VK_MAKE_VERSION(0, 0, 1), api_version = VK_API_VERSION_1_0())
     app_info = VkApplicationInfo(VK_STRUCTURE_TYPE_APPLICATION_INFO, exts, pointer(name), version, pointer(engine_name), engine_version, api_version)
     return app_info
 end
@@ -135,14 +101,16 @@ end
     return layers, layers_count
 end
 
-function create_instance(; glfw=true, debug=true)
+function create_instance(; glfw = true, debug = true)
     app_info_ref = Ref(create_appinfo())
     exts, exts_count = required_extensions(glfw, debug)
     layers, layers_count = required_layers(debug)
-    info = Ref(VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, unsafe_pointer(app_info_ref), layers_count, layers, exts_count, exts))
+    info = @safe_contain VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, unsafe_pointer(app_info_ref), layers_count, layers, exts_count, exts)
     inst_ref = Ref{VkInstance}()
-    @vkcheck vkCreateInstance(info, C_NULL, inst_ref)
-    return inst_ref[]
+    @vkcheck vkCreateInstance(Ref(info.obj), C_NULL, inst_ref)
+    cinst = Container(inst_ref[], [info])
+    finalizer(x->vkDestroyInstance(x.obj, C_NULL), cinst)
+    return cinst
 end
 
 function available_physical_devices(inst)
@@ -188,60 +156,50 @@ function select_queue_family(f, queue_families)
     end
 end
 
-# this function has to be generated so that there is no change in scope, which may invalide pointers
-@generated function unsafe_pointer(obj)
-    quote
-        @assert typeof(obj) <: Ref
-        Base.unsafe_convert(Ptr{typeof(obj[])}, obj)
-    end
-end
-
-function create_logical_device(physical_device, queue_family_index;features=nothing, queue_count=1, queue_priorities=[1.0])
-    device = Ref{VkDevice}()
+function create_logical_device(physical_device, queue_family_index;features = nothing, queue_count = 1, queue_priorities = [1.0])
+    device_ref = Ref{VkDevice}()
     @assert typeof(physical_device) == VkPhysicalDevice
     if isnothing(features)
         features = Ref(VkPhysicalDeviceFeatures(values(DEFAULT_VK_PHYSICAL_DEVICE_FEATURES)...))
     end
     device_queue_info = Ref(VkDeviceQueueCreateInfo(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, C_NULL, 0, queue_family_index, queue_count, Base.unsafe_convert(Ptr{Float32}, Array{Float32,1}(queue_priorities))))
-    @GC.preserve device_queue_info features begin
-        device_info = Ref(VkDeviceCreateInfo(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, C_NULL, 0, 1, unsafe_pointer(device_queue_info), 0, C_NULL, 0, C_NULL, unsafe_pointer(features)))
-        @vkcheck vkCreateDevice(physical_device, device_info, C_NULL, device)
-    end
-    return device, device_info, device_queue_info, features
+    cdevice_info = @safe_contain Ref(VkDeviceCreateInfo(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, C_NULL, 0, 1, unsafe_pointer(device_queue_info), 0, C_NULL, 0, C_NULL, unsafe_pointer(features)))
+    @vkcheck vkCreateDevice(physical_device, cdevice_info.obj, C_NULL, device_ref)
+    cdevice = Container(device_ref[], [cdevice_info, device_queue_info])
+    finalizer(x->vkDestroyDevice(x.obj, C_NULL), cdevice)
+    return cdevice, cdevice_info, device_queue_info, features
 end
 
 
 
-function initialize(; glfw=true, debug=true)
-    inst = create_instance(;glfw=glfw, debug=debug)
-    pdevices = available_physical_devices(inst)
+function initialize(; glfw = true, debug = true)
+    cinst = create_instance(;glfw = glfw, debug = debug)
+    # # not working yet
+    # if debug
+    #     messenger = debug_utils_messenger(cinst.obj)
+    # end
+    pdevices = available_physical_devices(cinst.obj)
     pdps = properties(pdevices)
     @debug "Physical devices found:$(map(x->"\n          $(String(x.deviceName))", pdps)...)"
     pdp = select_physical_device(pdp->pdp.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, pdps)
     @debug "Selected device \"$(String(pdp.deviceName))\""
-    pdevice = pdevices[findfirst(pdp, pdps)]
+    pdevice = pdevices[findfirst(x->x == pdp, pdps)]
     avail_qf = available_queue_families(pdevice)
     qf = select_queue_family(qf->qf.queueFlags & VK_QUEUE_GRAPHICS_BIT, avail_qf)
-    device, device_info, device_queue_info, features = create_logical_device(pdevice, findfirst(qf, avail_qf))
-    # vkDestroyDevice(device, C_NULL)
-    return inst, device
-end
-
-function cleanup(instance, device)
-    vkDestroyInstance(instance, C_NULL)
-    
-    # causes segfault at the moment
-    # vkDestroyDevice(device, C_NULL)
+    cdevice, cdevice_info, device_queue_info, features = create_logical_device(pdevice, findfirst(x->x == qf, avail_qf))
+    return cinst, cdevice
 end
 
 function test(; kwargs...)
-    inst, device = initialize(; kwargs...)
-    cleanup(inst, device)
+    cinst, device = initialize(; kwargs...)
     return true
 end
 
-function test_manytimes(; kwargs...)
-    for i in 1:20
+function test_manytimes(; times = 20, kwargs...)
+    for i in 1:times
         test(; kwargs...)
     end
 end
+
+test()
+# test_manytimes(;times=20)

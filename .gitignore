@@ -6,4 +6,6 @@
 /dev/
 /docs/build/
 /docs/site/
+/docs/src/tmp.md
+/playground
 resources
