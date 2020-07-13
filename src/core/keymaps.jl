@@ -4,7 +4,7 @@ function keyprinter(window::GLFW.Window, event::KeyEvent)
     end
 end
 
-function main(window::GLFW.Window, event::KeyEvent)
+function main_keymap(window::GLFW.Window, event::KeyEvent)
     if iskey("ctrl+a", "press", event)
         GLFW.SetWindowShouldClose(window, true)
     else

@@ -40,7 +40,9 @@ function debug_callback(message_severity::VkDebugUtilsMessageSeverityFlagBitsEXT
     message_type::VkDebugUtilsMessageTypeFlagsEXT,
     message,
     )
-    @vk_log message_severity "$message_type: $message"
+    @warn "$message_severity: $message_type: $message"
+    @info "YYYOU LOGG"
+    # @vk_log message_severity "$message_type: $message"
     return 0
 end
 
@@ -53,18 +55,23 @@ function generate_debug_callback_interface(callback_f::Function)
     end
 end
 
+callback_func = generate_debug_callback_interface(debug_callback)
+callback_func_c = @cfunction(callback_func, Cint, (UInt32, UInt32, Ptr{Cvoid}, Ptr{Cvoid}))
+
 
 function debug_utils_messenger(inst; severity = "debug", types = ["general", "validation", "performance"])
     severity_hierarchy = ["debug", "info", "warn", "error"]
     index = findfirst(severity_hierarchy .== severity)
     severity_bits = [message_severities[key] for key in severity_hierarchy[index:end]]
     type_bits = [message_types[key] for key in types]
-    messenger_info = Ref(VkDebugUtilsMessengerCreateInfoEXT(VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, C_NULL, 0, |(severity_bits...), |(type_bits...), @cfunction(generate_debug_callback_interface(debug_callback), Cint, (UInt32, UInt32, Ptr{Cvoid}, Ptr{Cvoid})), C_NULL))
-    func = vkGetInstanceProcAddr(inst, pointer("vkCreateDebugUtilsMessengerEXT"))
+    messenger_info = Ref(VkDebugUtilsMessengerCreateInfoEXT(VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, C_NULL, 0, |(severity_bits...), |(type_bits...), callback_func_c, C_NULL))
+    fname = "vkCreateDebugUtilsMessengerEXT"
+    cfunc = Container(vkGetInstanceProcAddr(inst, pointer(fname)), Any[Ref(fname)])
     messenger = Ref{VkDebugUtilsMessengerEXT}()
-    @vkcheck ccall(func, VkResult, (Core.Any, Core.Any, Core.Any, Core.Any), inst, unsafe_pointer(messenger_info), C_NULL, messenger)
+    func = cfunc[]
+    @vkcheck ccall(func, VkResult, (VkInstance, Ptr{VkDebugUtilsMessengerCreateInfoEXT}, Ptr{Nothing}, Ptr{VkDebugUtilsMessengerEXT}), inst, unsafe_pointer(messenger_info), C_NULL, messenger)
     # @vkcheck unsafe_load(func)(inst, unsafe_pointer(messenger_info), C_NULL, messenger)
-    Container(messenger[], messenger_info[])
+    Container(messenger[], Any[messenger_info, cfunc])
 end
 
 # using Libdl

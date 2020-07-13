@@ -63,18 +63,19 @@ function wrap_key_callback(f::Function)
     return callback
 end
 
-function window_loop(window::GLFW.Window, context::OpenGLContext)
-    GLFW.SwapBuffers(window)
-    GLFW.PollEvents()
+function window_loop(context::OpenGLContext, renderer::Function)
+    function loop(window::GLFW.Window)
+        renderer()
+        GLFW.SwapBuffers(window)
+        GLFW.PollEvents()
+    end
 end
 
-function window_loop(window::GLFW.Window, context::VulkanContext)
-    GLFW.PollEvents()
-end
-
-function window_loop(window::GLFW.Window, renderer::Function, context::AbstractContext)
-    renderer()
-    window_loop(window, context)
+function window_loop(context::VulkanContext, renderer::Function)
+    function loop(window::GLFW.Window)
+        renderer()
+        GLFW.PollEvents()
+    end
 end
 
 
@@ -86,36 +87,32 @@ function provide_window_hints(context::OpenGLContext)
 end
 
 function create_window(window_size::Tuple{Integer,Integer}, name, context::OpenGLContext)
+    provide_window_hints(context)
     window = GLFW.CreateWindow(window_size..., name)
     GLFW.MakeContextCurrent(window)
     return window
 end
 
 function create_window(window_size::Tuple{Integer,Integer}, name, context::VulkanContext)
+    provide_window_hints(context)
     window = GLFW.CreateWindow(window_size..., name)
     return window
 end
 
-function run_window(window, context; key_callback = nothing, renderer = nothing)
+function run_window(window, loop; key_callback = nothing)
     if !isnothing(key_callback)
         callback = wrap_key_callback(key_callback)
         GLFW.SetKeyCallback(window, callback)
     end
-
-    if !isnothing(renderer)
-        args = (window, renderer)
-    else
-        args = (window,)
-    end
     while !GLFW.WindowShouldClose(window)
-        window_loop(args..., context)
+        loop(window)
     end
     println("Good bye!")
     GLFW.DestroyWindow(window)
 end
 
-function run_window(window_size::Tuple{Integer,Integer}; key_callback = nothing, renderer = nothing, name::AbstractString = "Julia Game Engine", context::AbstractContext = OpenGLContext())
-    provide_window_hints(context)
+function run_window(window_size::Tuple{Integer,Integer}; key_callback = nothing, renderer = ()->nothing, name::AbstractString = "Julia Game Engine", context::AbstractContext = OpenGLContext())
     window = create_window(window_size, name, context)
-    run_window(window, context, key_callback = key_callback, renderer = renderer)
-end
+    loop = window_loop(context, renderer)
+    run_window(window, loop, key_callback = key_callback)
+end    

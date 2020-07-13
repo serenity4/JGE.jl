@@ -1,2 +1,2 @@
-@test JGE.test()
-@test JGE.test(debug=true)
+JGE.initialize(glfw = true, debug = false)
+JGE.test(debug = true)

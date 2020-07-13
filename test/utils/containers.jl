@@ -35,7 +35,7 @@ end
 
 function test_feature()
     # pointed values kept in the deps field of the container object, so unsafe_load returns the expected value
-    test_impl(test_case().obj, [Ref(Cint(1)), Ref(Ptr{Cvoid}())], false)
+    test_impl(test_case()[], [Ref(Cint(1)), Ref(Ptr{Cvoid}())], false)
 end
 
 test_feature_nomacro()
