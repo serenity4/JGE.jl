@@ -1,4 +1,4 @@
-mutable struct Instance <: VkHandle
+mutable struct Instance <: Handle
     application_name::AbstractString
     application_version::VersionNumber
     engine_name::AbstractString
@@ -9,7 +9,7 @@ mutable struct Instance <: VkHandle
     handle::VkInstance
     inst_info::VkInstanceCreateInfo
     app_info::VkApplicationInfo
-    
+    deps::AbstractArray
 end
 
 function Instance(application_name::AbstractString, application_version::VersionNumber, engine_name::AbstractString, engine_version::VersionNumber, api_version::VersionNumber, layers::AbstractArray, exts::AbstractArray)
@@ -23,8 +23,9 @@ function Instance(application_name::AbstractString, application_version::Version
     inst_info = VkInstanceCreateInfo(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, C_NULL, 0, unsafe_pointer(app_info_ref), length(layers), p_layers, length(exts), p_exts)
     handle = Ref{VkInstance}()
     @check vkCreateInstance(Ref(inst_info), C_NULL, handle)
-    inst = Instance(application_name, application_version, engine_name, engine_version, api_version, layers, exts, handle[], inst_info, app_info_ref[])
+    inst = Instance(application_name, application_version, engine_name, engine_version, api_version, layers, exts, handle[], inst_info, app_info_ref[], [])
     Base.finalizer(destroy_handle(vkDestroyInstance), inst)
+
     inst
 end
 

@@ -1,4 +1,4 @@
-struct PhysicalDevice <: VkHandle
+struct PhysicalDevice <: Handle
     name::AbstractString
     api_version::VersionNumber
     driver_version::VersionNumber
@@ -11,6 +11,12 @@ struct PhysicalDevice <: VkHandle
     handle::VkPhysicalDevice
 end
 
+function Base.show(io::IO, pdevice::PhysicalDevice)
+    println(io, "Physical device $(pdevice.name)")
+    println(io, " ↪ $(pdevice.device_type)")
+    println(io, " ↪ Driver: $(pdevice.driver_version)")
+    print(io, " ↪ Supported Vulkan API: $(pdevice.api_version)")
+end
 
 function Base.convert(T::Type{PhysicalDevice}, device::VkPhysicalDevice)
     dp = properties(device)

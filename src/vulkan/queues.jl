@@ -1,18 +1,33 @@
-function available_queue_families(device)
-    qf_count = Ref{UInt32}(0)
-    vkGetPhysicalDeviceQueueFamilyProperties(device, qf_count, C_NULL)
-    # vkGetPhysicalDeviceQueueFamilyProperties(C_NULL, qf_count, C_NULL)
-    qf_props = Array{VkQueueFamilyProperties}(undef, qf_count[])
-    vkGetPhysicalDeviceQueueFamilyProperties(device, qf_count, qf_props)
-    return qf_props
+struct QueueFamily
+    flags::UInt32
+    count::Integer
+    timestamp_valid_bits::UInt32
+    min_image_transfer_granularity::VkExtent3D
 end
 
-function select_queue_family(physical_device; predicate = qf->qf.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+Base.convert(T::Type{QueueFamily}, vk_qf::VkQueueFamilyProperties) = QueueFamily(vk_qf.queueFlags, vk_qf.queueCount, vk_qf.timestampValidBits, vk_qf.minImageTransferGranularity)
+Base.length(v::QueueFamily) = 1
+Base.iterate(v::QueueFamily) = v, nothing
+Base.iterate(v::QueueFamily, state::Nothing) = nothing
+
+function index(device::PhysicalDevice, qf::QueueFamily)
+    return findfirst(available_queue_families(device) .== qf)
+end
+
+function available_queue_families(device::PhysicalDevice)
+    qf_count = Ref{UInt32}(0)
+    vkGetPhysicalDeviceQueueFamilyProperties(device.handle, qf_count, C_NULL)
+    # vkGetPhysicalDeviceQueueFamilyProperties(C_NULL, qf_count, C_NULL)
+    qf_props = Array{VkQueueFamilyProperties}(undef, qf_count[])
+    vkGetPhysicalDeviceQueueFamilyProperties(device.handle, qf_count, qf_props)
+    return Base.convert.(Ref(QueueFamily), qf_props)
+end
+
+function select_queue_family(physical_device::PhysicalDevice; predicate = qf->qf.flags & VK_QUEUE_GRAPHICS_BIT)
     avail_qf = available_queue_families(physical_device)
     for (index, qf) in enumerate(avail_qf)
-        # @warn Bool(predicate(qf))
         if Bool(predicate(qf))
-            return index
+            return qf
         end
     end
     throw(ErrorException("No suitable queue family found"))

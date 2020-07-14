@@ -8,6 +8,6 @@ end
 
 function has_presentation_support(physical_device, queue_index, surface)
     is_supported = Ref(VkBool32(true))
-    @vkcheck vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_index, surface, is_supported)
+    @check vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_index, surface, is_supported)
     Bool(is_supported[])
 end

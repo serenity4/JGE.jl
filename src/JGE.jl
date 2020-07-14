@@ -4,13 +4,6 @@ using GLFW, VulkanCore.LibVulkan
 
 import VulkanCore
 
-vk = VulkanCore.vk
-
-import Base: reverse
-
-include("utils/containers.jl")
-include("utils/structures.jl")
-
 include("core/glfw.jl")
 include("core/keymaps.jl")
 
@@ -18,13 +11,13 @@ include("vulkan/defaults.jl")
 include("vulkan/common.jl")
 include("vulkan/layers.jl")
 include("vulkan/extensions.jl")
-include("vulkan/validation.jl")
-include("vulkan/init.jl")
-include("vulkan/presentation.jl")
-include("vulkan/queues.jl")
 include("vulkan/instance.jl")
+include("vulkan/validation.jl")
+include("vulkan/presentation.jl")
 include("vulkan/physical_device.jl")
+include("vulkan/queues.jl")
 include("vulkan/logical_device.jl")
+include("vulkan/init.jl")
 
 function main(;context::AbstractContext = VulkanContext())
     glfw = true
@@ -55,6 +48,6 @@ function main_gl(; context::AbstractContext = VulkanContext())
     run_window((1000, 720), context = context, key_callback = main_keymap)
 end
 
-export Instance, available_extensions, available_layers, available_physical_devices, check_extensions, check_layers, main, main_gl, OpenGLContext, VulkanContext, Container, unsafe_pointer, initialize
+export Instance, Extension, Layer, PhysicalDevice, Device, available_extensions, available_layers, available_physical_devices, check_extensions, check_layers, main, main_gl, OpenGLContext, VulkanContext, Container, unsafe_pointer, initialize, select_queue_family, attach_debug_callback!, default_debug_callback_c
 
 end # module
