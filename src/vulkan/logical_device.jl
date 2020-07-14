@@ -25,7 +25,7 @@ function Device(physical_device, features, queues, exts; queue_priorities = noth
     vk_features_ref = Ref(VkPhysicalDeviceFeatures(values(features_dict)...))
     device_info = VkDeviceCreateInfo(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, C_NULL, 0, length(queues), pointer(queue_infos), 0, C_NULL, length(exts), p_exts,  unsafe_pointer(vk_features_ref))
     device_ref = Ref{VkDevice}()
-    @check vkCreateDevice(physical_device.handle, Ref(device_info), C_NULL, device_ref)
+    @check vkCreateDevice(physical_device.handle, Ref(device_info), C_NULL, device_ref) "failed to create logical device"
     device = Device(physical_device, features, queues, queue_priorities, queue_infos, exts, vk_features_ref[], device_ref[])
     finalizer(destroy_handle(vkDestroyDevice), device)
 

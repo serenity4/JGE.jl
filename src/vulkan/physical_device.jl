@@ -36,3 +36,12 @@ function available_physical_devices(inst::Instance)
     @check vkEnumeratePhysicalDevices(inst.handle, device_count, devices)
     return Base.convert.(PhysicalDevice, devices)
 end
+
+function available_extensions(pdevice::PhysicalDevice)
+    exts_count = Ref{UInt32}()
+    @check vkEnumerateDeviceExtensionProperties(pdevice.handle, C_NULL, exts_count, C_NULL)
+    exts = Array{VkExtensionProperties}(undef, exts_count[])
+    @check vkEnumerateDeviceExtensionProperties(pdevice.handle, C_NULL, exts_count, exts)
+
+    Base.convert.(Extension, exts)
+end

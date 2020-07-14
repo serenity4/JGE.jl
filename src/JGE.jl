@@ -13,10 +13,11 @@ include("vulkan/layers.jl")
 include("vulkan/extensions.jl")
 include("vulkan/instance.jl")
 include("vulkan/validation.jl")
-include("vulkan/presentation.jl")
+include("vulkan/glfw.jl")
 include("vulkan/physical_device.jl")
-include("vulkan/queues.jl")
 include("vulkan/logical_device.jl")
+include("vulkan/presentation.jl")
+include("vulkan/queues.jl")
 include("vulkan/init.jl")
 
 function main(;context::AbstractContext = VulkanContext())
@@ -48,6 +49,35 @@ function main_gl(; context::AbstractContext = VulkanContext())
     run_window((1000, 720), context = context, key_callback = main_keymap)
 end
 
-export Instance, Extension, Layer, PhysicalDevice, Device, available_extensions, available_layers, available_physical_devices, check_extensions, check_layers, main, main_gl, OpenGLContext, VulkanContext, Container, unsafe_pointer, initialize, select_queue_family, attach_debug_callback!, default_debug_callback_c
+export Device,
+    Extension,
+    Instance,
+    Layer,
+    OpenGLContext,
+    PhysicalDevice,
+    Queue,
+    QueueFamily,
+    SurfaceCapabilities,
+    SurfaceFormat,
+    SwapChainSupportDetails,
+    VulkanContext,
+
+    attach_debug_callback!,
+    available_extensions,
+    available_layers,
+    available_physical_devices,
+    available_queue_families,
+    available_surface_formats,
+    available_surface_presentation_modes,
+    check_extensions,
+    check_layers,
+    create_surface,
+    create_window,
+    default_debug_callback_c,
+    initialize,
+    main,
+    main_gl,
+    select_queue_family,
+    unsafe_pointer
 
 end # module

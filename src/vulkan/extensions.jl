@@ -3,6 +3,7 @@ struct Extension
     spec_version::VersionNumber
 end
 
+Extension(name::AbstractString) = Extension(name, VersionNumber(0, 0, 0))
 Base.convert(T::Type{Extension}, ext::VkExtensionProperties) = T(int_to_str(ext.extensionName), int_to_version(ext.specVersion))
 
 function available_extensions()

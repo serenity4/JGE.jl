@@ -10,13 +10,19 @@ Base.showerror(io::Core.IO, e::VulkanError) = print(io, "$(e.errorcode): ", e.ms
 Checks whether the expression returned VK_SUCCESS. Else, throw an error printing the corresponding code."""
 macro check(expr)
     quote
+        local msg = "failed to execute " * $(string(expr))
+        @check $(esc(expr)) msg
+    end
+end
+
+macro check(expr, msg)
+    quote
         local expr_return_code = $(esc(expr))
-        if typeof(expr_return_code) != LibVulkan.VkResult
-            throw(ErrorException("the return value is not a valid code"))
+        if typeof(expr_return_code) != VkResult
+            throw(ErrorException("the return value must be a value of type VkResult"))
         end
-        if expr_return_code != LibVulkan.VK_SUCCESS
-            local str_error = $(string(expr))
-            throw(VulkanError("failed to execute $str_error", expr_return_code))
+        if expr_return_code != VK_SUCCESS
+            throw(VulkanError($msg, expr_return_code))
         end
     end
 end
